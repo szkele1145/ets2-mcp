@@ -74,6 +74,12 @@ export class Ets2McpServer {
     this.bridgeClient.on('disconnected', () => {
       console.error('[ETS2 MCP] Control bridge disconnected');
     });
+    this.bridgeClient.on('scsConnected', () => {
+      console.error('[ETS2 MCP] SCS plugin connected');
+    });
+    this.bridgeClient.on('scsDisconnected', () => {
+      console.error('[ETS2 MCP] SCS plugin disconnected');
+    });
     this.bridgeClient.on('error', (err) => {
       console.error('[ETS2 MCP] Bridge error:', err.message);
     });
@@ -344,6 +350,112 @@ export class Ets2McpServer {
             required: ['lat', 'lon'],
           },
         },
+
+        // SCS Plugin Commands (Legal buy/customize/paint) - require SCS bridge
+        {
+          name: 'ets2_scs_connect',
+          description: 'Connect to SCS plugin for legal truck buying/customization',
+          inputSchema: { type: 'object', properties: {} },
+        },
+        {
+          name: 'ets2_scs_status',
+          description: 'Get SCS plugin connection status',
+          inputSchema: { type: 'object', properties: {} },
+        },
+        {
+          name: 'ets2_dealer_list',
+          description: 'Get nearby dealers (brands, location, distance)',
+          inputSchema: {
+            type: 'object',
+            properties: { maxDistanceKm: { type: 'number', default: 100, description: 'Search radius in km' } },
+            required: [],
+          },
+        },
+        {
+          name: 'ets2_service_list',
+          description: 'Get nearby service shops (customization/paint)',
+          inputSchema: {
+            type: 'object',
+            properties: { maxDistanceKm: { type: 'number', default: 100, description: 'Search radius in km' } },
+            required: [],
+          },
+        },
+        {
+          name: 'ets2_buy_truck',
+          description: 'Buy a truck at current dealer (must be at dealer, needs money)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              makeId: { type: 'string', description: 'Brand: scania, volvo, man, daf, iveco, renault, mercedes' },
+              modelId: { type: 'string', description: 'Model: scania_r_2016, volvo_fh16_2012, etc.' },
+              engineId: { type: 'string', description: 'Engine: scania_dc16_730, volvo_d16k_750, etc.' },
+              transmissionId: { type: 'string', description: 'Transmission: grso_12_speed, etc.' },
+              chassisId: { type: 'string', description: 'Chassis: 6x4, 4x2, 8x4, etc.' },
+              cabinId: { type: 'string', description: 'Cabin: scania_r_streamline, etc.' },
+              paintId: { type: 'string', description: 'Base paint ID' },
+              accessoryIds: { type: 'array', items: { type: 'string' }, description: 'Accessory IDs' },
+            },
+            required: ['makeId', 'modelId'],
+          },
+        },
+        {
+          name: 'ets2_sell_truck',
+          description: 'Sell a truck from garage',
+          inputSchema: {
+            type: 'object',
+            properties: { truckId: { type: 'string', description: 'Truck ID to sell' } },
+            required: ['truckId'],
+          },
+        },
+        {
+          name: 'ets2_owned_trucks',
+          description: 'List all owned trucks in garage',
+          inputSchema: { type: 'object', properties: {} },
+        },
+        {
+          name: 'ets2_customize_truck',
+          description: 'Customize current truck at service (engine, transmission, chassis, cabin, accessories)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              makeId: { type: 'string' },
+              modelId: { type: 'string' },
+              engineId: { type: 'string' },
+              transmissionId: { type: 'string' },
+              chassisId: { type: 'string' },
+              cabinId: { type: 'string' },
+              paintId: { type: 'string' },
+              accessoryIds: { type: 'array', items: { type: 'string' } },
+            },
+            required: ['makeId', 'modelId'],
+          },
+        },
+        {
+          name: 'ets2_paint_truck',
+          description: 'Paint current truck at service (color, metallic, gloss, decal)',
+          inputSchema: {
+            type: 'object',
+            properties: {
+              baseColor: { type: 'integer', description: 'RGB packed (0xRRGGBB)', minimum: 0, maximum: 0xFFFFFF },
+              secondaryColor: { type: 'integer', description: 'Secondary RGB', minimum: 0, maximum: 0xFFFFFF },
+              metallic: { type: 'number', description: 'Metallic 0.0-1.0', minimum: 0, maximum: 1 },
+              gloss: { type: 'number', description: 'Gloss 0.0-1.0', minimum: 0, maximum: 1 },
+              decalId: { type: 'string', description: 'Decal/skin ID' },
+              decalColorId: { type: 'string', description: 'Decal color variant' },
+            },
+            required: ['baseColor'],
+          },
+        },
+        {
+          name: 'ets2_available_options',
+          description: 'Get available customization options for current truck (engines, transmissions, chassis, cabins, paints, accessories)',
+          inputSchema: { type: 'object', properties: {} },
+        },
+        {
+          name: 'ets2_money',
+          description: 'Get current money balance',
+          inputSchema: { type: 'object', properties: {} },
+        },
       ],
     }));
 
@@ -431,6 +543,30 @@ export class Ets2McpServer {
             return await this.handleSpeedConversion(args as { kmh: number });
           case 'ets2_format_coordinates':
             return await this.handleFormatCoordinates(args as { lat: number; lon: number });
+
+          // SCS Plugin handlers
+          case 'ets2_scs_connect':
+            return await this.handleScsConnect();
+          case 'ets2_scs_status':
+            return await this.handleScsStatus();
+          case 'ets2_dealer_list':
+            return await this.handleDealerList(args as { maxDistanceKm?: number });
+          case 'ets2_service_list':
+            return await this.handleServiceList(args as { maxDistanceKm?: number });
+          case 'ets2_buy_truck':
+            return await this.handleBuyTruck(args as any);
+          case 'ets2_sell_truck':
+            return await this.handleSellTruck(args as { truckId: string });
+          case 'ets2_owned_trucks':
+            return await this.handleOwnedTrucks();
+          case 'ets2_customize_truck':
+            return await this.handleCustomizeTruck(args as any);
+          case 'ets2_paint_truck':
+            return await this.handlePaintTruck(args as any);
+          case 'ets2_available_options':
+            return await this.handleAvailableOptions();
+          case 'ets2_money':
+            return await this.handleMoney();
           default:
             throw new McpError(ErrorCode.MethodNotFound, `Unknown tool: ${name}`);
         }
@@ -741,6 +877,80 @@ export class Ets2McpServer {
       return `${d}°${m}'${s}"${dir}`;
     };
     return { content: [{ type: 'text', text: `Lat: ${toDMS(args.lat, true)}\nLon: ${toDMS(args.lon, false)}` }] };
+  }
+
+  // ===== SCS Plugin Handlers =====
+  private requireScsBridge() {
+    if (!this.bridgeClient.isScsConnected) {
+      throw new McpError(ErrorCode.InternalError, 'SCS plugin not connected. Call ets2_scs_connect first (requires ets2_mcp_plugin.dll loaded in game).');
+    }
+  }
+
+  private async handleScsConnect() {
+    try {
+      await this.bridgeClient.connectScs();
+      return { content: [{ type: 'text', text: 'SCS plugin connected' }] };
+    } catch (e) {
+      throw new McpError(ErrorCode.InternalError, `SCS connect failed: ${e instanceof Error ? e.message : String(e)}. Ensure ets2_mcp_plugin.dll is in ETS2 plugins folder and game is running.`);
+    }
+  }
+
+  private async handleScsStatus() {
+    return { content: [{ type: 'text', text: this.bridgeClient.isScsConnected ? 'Connected' : 'Disconnected' }] };
+  }
+
+  private async handleDealerList(args: { maxDistanceKm?: number }) {
+    this.requireScsBridge();
+    const dealers = await this.bridgeClient.scsGetDealers(args.maxDistanceKm ?? 100);
+    return { content: [{ type: 'text', text: JSON.stringify(dealers, null, 2) }] };
+  }
+
+  private async handleServiceList(args: { maxDistanceKm?: number }) {
+    this.requireScsBridge();
+    const services = await this.bridgeClient.scsGetServices(args.maxDistanceKm ?? 100);
+    return { content: [{ type: 'text', text: JSON.stringify(services, null, 2) }] };
+  }
+
+  private async handleBuyTruck(args: any) {
+    this.requireScsBridge();
+    const result = await this.bridgeClient.scsBuyTruck(args);
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  }
+
+  private async handleSellTruck(args: { truckId: string }) {
+    this.requireScsBridge();
+    const result = await this.bridgeClient.scsSellTruck(args.truckId);
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  }
+
+  private async handleOwnedTrucks() {
+    this.requireScsBridge();
+    const trucks = await this.bridgeClient.scsGetOwnedTrucks();
+    return { content: [{ type: 'text', text: JSON.stringify(trucks, null, 2) }] };
+  }
+
+  private async handleCustomizeTruck(args: any) {
+    this.requireScsBridge();
+    const result = await this.bridgeClient.scsCustomizeTruck(args);
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  }
+
+  private async handlePaintTruck(args: any) {
+    this.requireScsBridge();
+    const result = await this.bridgeClient.scsPaintTruck(args);
+    return { content: [{ type: 'text', text: JSON.stringify(result, null, 2) }] };
+  }
+
+  private async handleAvailableOptions() {
+    this.requireScsBridge();
+    const options = await this.bridgeClient.scsGetAvailableOptions();
+    return { content: [{ type: 'text', text: JSON.stringify(options, null, 2) }] };
+  }
+
+  private async handleMoney() {
+    this.requireScsBridge();
+    const money = await this.bridgeClient.scsGetMoney();
+    return { content: [{ type: 'text', text: JSON.stringify(money, null, 2) }] };
   }
 
   async start(): Promise<void> {

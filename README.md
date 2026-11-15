@@ -11,11 +11,12 @@
 | Category | Capabilities |
 |----------|--------------|
 | **📊 Telemetry (Read)** | Speed, RPM, gear, fuel, damage, lights, cruise, odometer, trailer cargo, job route, navigation, weather, GPS |
-| **🎮 Control (Write)** | Throttle/brake/steering/clutch axes, gear shifts, all lights, cruise control, teleport, refuel, repair, time scale |
+| **🎮 Control (Write) — SendInput** | Throttle/brake/steering/clutch axes, gear shifts, all lights, cruise control, teleport, refuel, repair, time scale |
+| **🏪 SCS Plugin (Legal Write)** | **Buy trucks at dealers**, **customize at service** (engine/transmission/chassis/cabin/accessories), **paint** (color/metallic/gloss/decal), list owned trucks, get money |
 | **🤖 Driving Helpers** | Drive straight at speed, turn left/right, emergency stop, auto-follow GPS navigation |
 | **🔧 Utilities** | km/h ↔ mph, decimal ↔ DMS coordinates |
 
-**31 MCP tools** + **6 resources** — everything an agent needs to drive, navigate, and manage jobs.
+**46 MCP tools** + **6 resources** — everything an agent needs to drive, navigate, manage jobs, **buy trucks, customize, and paint legally**.
 
 ---
 
@@ -25,9 +26,11 @@
 |-----------|-----------|---------|
 | **ETS2 (Steam)** | ✅ Yes | The game |
 | **Funbit Telemetry Server** | ✅ Yes | Exposes game data via HTTP (shared memory → HTTP) |
+| **ETS2 MCP Plugin** | ✅ For SCS features | C++ DLL for legal buy/customize/paint (in release zip) |
 | **Windows 10/11** | ✅ Yes | Control Bridge uses Windows `SendInput` |
 | **Node.js 20+** | ✅ Yes | Runs MCP server |
 | **.NET 8 SDK** | 📦 Build only | Compile Control Bridge (prebuilt in releases) |
+| **CMake + MSVC** | 📦 Build only | Compile SCS plugin (prebuilt in releases) |
 
 ---
 
@@ -40,27 +43,38 @@
    ```
    <SteamLibrary>\steamapps\common\Euro Truck Simulator 2\bin\win_x64\plugins\
    ```
-3. Launch ETS2 → drive into world (not menu) → verify: open `http://127.0.0.1:25555/api/telemetry` in browser → should show JSON.
 
-### Step 2: Get ETS2 MCP
+### Step 2: Install ETS2 MCP Plugin (for legal buy/customize/paint)
+
+1. From the release zip, copy `ets2_mcp_plugin.dll` to the **same plugins folder**:
+   ```
+   <SteamLibrary>\steamapps\common\Euro Truck Simulator 2\bin\win_x64\plugins\
+   ```
+2. Launch ETS2 → drive into world → the plugin auto-loads and creates named pipe `\\.\pipe\ets2mcp_scs`
+
+### Step 3: Get ETS2 MCP
 
 **Option A: Prebuilt Release (Recommended)**
-- Download `ets2-mcp-vX.Y.Z-windows.zip` from **[GitHub Releases](https://github.com/<your-repo>/releases)**
+- Download `ets2-mcp-vX.Y.Z-windows.zip` from **[GitHub Releases](https://github.com/szkele1145/ets2-mcp/releases)**
 - Extract anywhere (e.g., `C:\ets2-mcp\`)
 
 **Option B: Build from Source**
 ```bash
-git clone https://github.com/<your-repo>.git
+git clone https://github.com/szkele1145/ets2-mcp.git
 cd ets2-mcp
 npm ci
 npm run build
 # Build Control Bridge (Windows only):
 cd bridge/ControlBridge
 dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true
-# Copy the .exe to dist/ or root
+# Build SCS Plugin (Windows only, requires CMake + MSVC):
+cd ../../bridge/ScsPlugin
+cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -A x64
+cmake --build build --config Release
+# Copy .exe and .dll to dist/ or root
 ```
 
-### Step 3: Run Both Components
+### Step 4: Run Both Components
 
 **Terminal 1 — Control Bridge (Run as Administrator)**
 ```cmd
@@ -69,7 +83,9 @@ ETS2ControlBridge.exe
 ```
 Output:
 ```
-[ETS2ControlBridge] Starting on pipe \\.\pipe\ets2mcp
+[ETS2ControlBridge] Starting on pipes:
+  - \\.\pipe\ets2mcp (basic control)
+  - \\.\pipe\ets2mcp_scs (SCS plugin)
 [ETS2ControlBridge] Waiting for MCP server...
 ```
 
@@ -82,7 +98,7 @@ Output:
 [ETS2 MCP] Server started on stdio
 ```
 
-### Step 4: Configure Your MCP Client
+### Step 5: Configure Your MCP Client
 
 Add to your MCP client config (Claude Desktop, Cursor, VS Code, etc.):
 
@@ -118,16 +134,18 @@ Agent: → ets2_drive_straight {speedKmh: 80} → "Driving straight at 80 km/h"
 
 ---
 
-## 🎮 All 31 MCP Tools
+## 🎮 All 46 MCP Tools
 
-### Connection (5)
+### Connection (7)
 | Tool | Description |
 |------|-------------|
 | `ets2_connect` | Connect to HTTP telemetry server |
 | `ets2_disconnect` | Disconnect telemetry |
 | `ets2_connection_status` | Check telemetry connection |
-| `ets2_bridge_connect` | Connect to Control Bridge (named pipe) |
-| `ets2_bridge_status` | Check bridge connection |
+| `ets2_bridge_connect` | Connect to Control Bridge (basic control pipe) |
+| `ets2_bridge_status` | Check basic control bridge connection |
+| `ets2_scs_connect` | Connect to SCS plugin (legal buy/customize/paint) |
+| `ets2_scs_status` | Check SCS plugin connection |
 
 ### Telemetry — Read (11)
 | Tool | Returns |
@@ -144,7 +162,7 @@ Agent: → ets2_drive_straight {speedKmh: 80} → "Driving straight at 80 km/h"
 | `ets2_get_driving_status` | Speed, gear, RPM, throttle/brake/steering %, cruise, lights |
 | `ets2_get_job_progress` | Distance left, time left, on-time status, income |
 
-### Control — Write (13) — *Requires `ets2_bridge_connect` first*
+### Control — Write (13) — *Requires `ets2_bridge_connect` first (SendInput)*
 | Tool | Parameters | Example |
 |------|------------|---------|
 | `ets2_set_throttle` | `value: 0–1` | `0.7` |
@@ -160,6 +178,19 @@ Agent: → ets2_drive_straight {speedKmh: 80} → "Driving straight at 80 km/h"
 | `ets2_refuel` | — | — |
 | `ets2_repair` | — | — |
 | `ets2_set_time_scale` | `scale: 0.1–100` | `10` |
+
+### SCS Plugin — Legal Write (11) — *Requires `ets2_scs_connect` first (C++ DLL)*
+| Tool | Parameters | Use Case |
+|------|------------|----------|
+| `ets2_dealer_list` | `maxDistanceKm?: number` | Find nearby dealers (brands, location, distance) |
+| `ets2_service_list` | `maxDistanceKm?: number` | Find nearby service shops (customize/paint) |
+| `ets2_buy_truck` | `makeId, modelId, engineId?, transmissionId?, chassisId?, cabinId?, paintId?, accessoryIds?` | **Buy truck at dealer** (must be at dealer, needs money) |
+| `ets2_sell_truck` | `truckId: string` | Sell truck from garage |
+| `ets2_owned_trucks` | — | List all owned trucks in garage |
+| `ets2_customize_truck` | `makeId, modelId, engineId?, transmissionId?, chassisId?, cabinId?, paintId?, accessoryIds?` | **Customize at service** (engine, transmission, chassis, cabin, accessories) |
+| `ets2_paint_truck` | `baseColor (0xRRGGBB), secondaryColor?, metallic?, gloss?, decalId?, decalColorId?` | **Paint at service** (color, metallic, gloss, decal) |
+| `ets2_available_options` | — | Get available engines, transmissions, chassis, cabins, paints, accessories for current truck |
+| `ets2_money` | — | Get current money balance |
 
 ### Driving Helpers (4)
 | Tool | Parameters | Use Case |
@@ -223,6 +254,43 @@ ets2_get_fuel_status → "340L (68%), range 920 km — OK"
 ets2_get_navigation → "Left in 500m onto A7, limit 80"
 ```
 
+### "Buy a new Scania R730"
+```
+ets2_scs_connect                          // Connect to SCS plugin
+ets2_dealer_list {maxDistanceKm: 50}      // Find Scania dealer nearby
+ets2_money                                // Check balance
+ets2_buy_truck {                          // Buy at dealer
+  makeId: "scania",
+  modelId: "scania_r_2016",
+  engineId: "scania_dc16_730",
+  transmissionId: "grso_12_speed",
+  chassisId: "6x4",
+  cabinId: "scania_r_streamline"
+}
+```
+
+### "Fully customize current truck"
+```
+ets2_scs_connect
+ets2_service_list {maxDistanceKm: 30}     // Find service shop
+ets2_available_options                    // See what's available
+ets2_customize_truck {                    // Upgrade everything
+  makeId: "scania",
+  modelId: "scania_r_2016",
+  engineId: "scania_dc16_730",
+  transmissionId: "grso_12_speed",
+  chassisId: "6x4",
+  cabinId: "scania_r_streamline",
+  accessoryIds: ["roof_lights", "bullbar", "side_skirt"]
+}
+ets2_paint_truck {                        // Custom paint
+  baseColor: 0x1a1a2e,    // Dark blue
+  metallic: 0.8,
+  gloss: 0.9,
+  decalId: "scania_griffin"
+}
+```
+
 ---
 
 ## 🏗 Architecture
@@ -241,17 +309,21 @@ ets2_get_navigation → "Left in 500m onto A7, limit 80"
                      │ Port 25555   │     │ ETS2ControlBridge│
                      └──────────────┘     └───────┬────────┘
                                                    │
-                                          ┌────────┴────────┐
-                                          ▼                 ▼
-                                 ┌──────────────┐  ┌──────────────┐
-                                 │ ETS2 Process │  │ Windows      │
-                                 │ Shared Mem   │  │ SendInput    │
-                                 │ (Funbit DLL) │  │ (keystrokes) │
-                                 └──────────────┘  └──────────────┘
+                              ┌───────────────────┼───────────────────┐
+                              ▼                   ▼                   ▼
+                     ┌──────────────┐     ┌──────────────┐    ┌──────────────────┐
+                     │ ETS2 Process │     │ Windows      │    │ C++ SCS Plugin   │
+                     │ Shared Mem   │     │ SendInput    │    │ (In-process DLL) │
+                     │ (Funbit DLL) │     │ (keystrokes) │    │ - BuyTruck()     │
+                     └──────────────┘     └──────────────┘    │ - Customize()    │
+                                                               │ - Paint()        │
+                                                               │ - GetDealers()   │
+                                                               └──────────────────┘
 ```
 
 - **Telemetry**: Funbit plugin reads game shared memory → HTTP JSON on `:25555`
-- **Control**: Bridge simulates keyboard via `SendInput` — **no DLL injection**, works on all game versions
+- **Control (SendInput)**: Bridge simulates keyboard via `SendInput` — **no DLL injection**, works on all game versions
+- **SCS Plugin (Legal)**: In-process C++ DLL using SCS SDK — **buy trucks, customize, paint** at dealer/service (requires `ets2_mcp_plugin.dll` in plugins folder)
 
 ---
 
