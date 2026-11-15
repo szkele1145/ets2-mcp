@@ -1,0 +1,109 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main, master]
+    tags: ['v*']
+  pull_request:
+    branches: [main, master]
+
+env:
+  DOTNET_VERSION: '8.0.x'
+  NODE_VERSION: '22.x'
+
+jobs:
+  # TypeScript build & typecheck
+  build-ts:
+    name: Build TypeScript
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run build
+
+      - name: Upload TS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          retention-days: 7
+
+  # C# Control Bridge build
+  build-bridge:
+    name: Build Control Bridge
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore bridge/ControlBridge/ControlBridge.csproj
+
+      - name: Build
+        run: dotnet build bridge/ControlBridge/ControlBridge.csproj -c Release --no-restore
+
+      - name: Publish (single-file, self-contained)
+        run: dotnet publish bridge/ControlBridge/ControlBridge.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:PublishTrimmed=true -o ${{ runner.temp }}/bridge
+
+      - name: Upload Bridge artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ControlBridge-windows
+          path: ${{ runner.temp }}/bridge/ETS2ControlBridge.exe
+          retention-days: 30
+
+  # Create release package on tag push
+  release:
+    name: Create Release
+    needs: [build-ts, build-bridge]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download TS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Download Bridge artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ControlBridge-windows
+          path: bridge-bin/
+
+      - name: Prepare release package
+        run: |
+          mkdir -p release/ets2-mcp
+          cp -r dist/* release/ets2-mcp/
+          cp bridge-bin/ETS2ControlBridge.exe release/ets2-mcp/
+          cp README.md mcp-config.json release/ets2-mcp/
+          cd release && zip -r ets2-mcp-${{ github.ref_name }}-windows.zip ets2-mcp/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: release/ets2-mcp-${{ github.ref_name }}-windows.zip
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

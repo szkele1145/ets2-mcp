@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Test
+coverage/
+.nyc_output/
+
+# Distribution
+*.zip
+*.exe
+
+# Local config
+.env
+.env.local
+
+# Bridge build artifacts
+bridge/ControlBridge/bin/
+bridge/ControlBridge/obj/
+bridge/ControlBridge/*.exe

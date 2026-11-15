@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "ets2": {
+      "command": "node",
+      "args": ["C:/ets2-mcp/dist/index.js"],
+      "env": {
+        "ETS2_HOST": "127.0.0.1",
+        "ETS2_PORT": "25555",
+        "ETS2_ENDPOINT": "/api/telemetry"
+      }
+    }
+  }
+}

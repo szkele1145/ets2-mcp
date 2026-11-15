@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "ETS2ControlBridge": {
+      "commandName": "Project",
+      "commandLineArgs": ""
+    }
+  }
+}
