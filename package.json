@@ -20,12 +20,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/<your-username>/ets2-mcp.git"
+    "url": "https://github.com/szkele1145/ets2-mcp.git"
   },
   "bugs": {
-    "url": "https://github.com/<your-username>/ets2-mcp/issues"
+    "url": "https://github.com/szkele1145/ets2-mcp/issues"
   },
-  "homepage": "https://github.com/<your-username>/ets2-mcp#readme",
+  "homepage": "https://github.com/szkele1145/ets2-mcp#readme",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0"
   },
